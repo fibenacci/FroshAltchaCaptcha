@@ -76,3 +76,20 @@ This plugin is licensed under the [MIT License](LICENSE).
 ## About Altcha
 
 Altcha is an open-source, self-hosted CAPTCHA alternative that provides bot protection without compromising user privacy or experience. Learn more at [altcha.org](https://altcha.org/).
+
+## Replay protection (single-use challenges)
+
+Altcha verifies a submission's signature, proof of work and expiry, but not whether
+the solved challenge has been used before. Without that check a single solved token is
+accepted on every submission until it expires — one proof of work buys unlimited
+requests inside the validity window.
+
+This plugin enforces single use. On the first accepted submission the challenge
+signature is recorded in `frosh_altcha_captcha_used_challenge`; any later submission
+carrying the same signature is rejected. A `UNIQUE` key makes the first write win even
+under concurrent submissions, expired rows are purged opportunistically, and a storage
+failure fails open (logged) so a database outage cannot lock every protected form.
+
+The challenge validity window (`AltchaController`) is kept short as defense in depth;
+tune it together with `cost`/`counter` for the balance of bot cost versus latency your
+shop needs.

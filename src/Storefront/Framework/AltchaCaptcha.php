@@ -10,6 +10,8 @@ use AltchaOrg\Altcha\Payload;
 use AltchaOrg\Altcha\ServerSignature;
 use AltchaOrg\Altcha\Solution;
 use AltchaOrg\Altcha\VerifySolutionOptions;
+use DateTimeImmutable;
+use DateTimeInterface;
 use Psr\Log\LoggerInterface;
 use Shopware\Storefront\Framework\Captcha\AbstractCaptcha;
 use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
@@ -27,6 +29,7 @@ class AltchaCaptcha extends AbstractCaptcha
     public function __construct(
         #[Autowire(service: 'monolog.logger.frosh_altcha_captcha')]
         private readonly LoggerInterface $logger,
+        private readonly ChallengeReplayGuard $replayGuard,
     ) {
     }
 
@@ -46,11 +49,19 @@ class AltchaCaptcha extends AbstractCaptcha
 
         try {
             if (isset($payload['verificationData'])) {
-                return ServerSignature::verifyServerSignature($payload, $secretKey)->verified;
+                if (!ServerSignature::verifyServerSignature($payload, $secretKey)->verified) {
+                    return false;
+                }
+
+                return $this->claimSingleUse($payload);
             }
 
             if (isset($payload['challenge'], $payload['solution'])) {
-                return $this->verifyPowSolution($payload, $secretKey);
+                if (!$this->verifyPowSolution($payload, $secretKey)) {
+                    return false;
+                }
+
+                return $this->claimSingleUse($payload);
             }
         } catch (\Throwable $e) {
             $this->logger->warning('Altcha captcha verification threw; treating submission as invalid.', [
@@ -117,5 +128,75 @@ class AltchaCaptcha extends AbstractCaptcha
             payload: new Payload($challenge, $solution),
             algorithm: new Pbkdf2(),
         ))->verified;
+    }
+
+    /**
+     * Rejects a solved challenge that has already been used. Altcha proves the work but
+     * not that the token is fresh; without this a single solve is replayable until expiry.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function claimSingleUse(array $payload): bool
+    {
+        $claim = $this->extractClaim($payload);
+        if ($claim === null) {
+            return true;
+        }
+
+        if ($this->replayGuard->claim($claim['signature'], $claim['expiresAt'])) {
+            return true;
+        }
+
+        $this->logger->warning('Altcha captcha rejected a replayed challenge.');
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     *
+     * @return array{signature: string, expiresAt: DateTimeInterface}|null
+     */
+    private function extractClaim(array $payload): ?array
+    {
+        $challenge = $payload['challenge'] ?? null;
+        if (\is_array($challenge)) {
+            $signature = $challenge['signature'] ?? null;
+            $expiresAt = $challenge['parameters']['expiresAt'] ?? null;
+
+            if (\is_string($signature) && $signature !== '') {
+                return [
+                    'signature' => $signature,
+                    'expiresAt' => $this->expiryFromTimestamp(\is_int($expiresAt) ? $expiresAt : null),
+                ];
+            }
+        }
+
+        $signature = $payload['signature'] ?? null;
+        if (\is_string($signature) && $signature !== '') {
+            $expiresAt = null;
+            $verificationData = $payload['verificationData'] ?? null;
+            if (\is_string($verificationData)) {
+                \parse_str($verificationData, $fields);
+                $expire = $fields['expire'] ?? null;
+                $expiresAt = \is_numeric($expire) ? (int) $expire : null;
+            }
+
+            return [
+                'signature' => $signature,
+                'expiresAt' => $this->expiryFromTimestamp($expiresAt),
+            ];
+        }
+
+        return null;
+    }
+
+    private function expiryFromTimestamp(?int $timestamp): DateTimeImmutable
+    {
+        // A challenge without an expiry still gets a short retention so the row is
+        // deduplicated and later purged rather than kept forever.
+        $timestamp ??= \time() + 300;
+
+        return (new DateTimeImmutable())->setTimestamp($timestamp);
     }
 }

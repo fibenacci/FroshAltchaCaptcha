@@ -36,7 +36,9 @@ class AltchaController extends AbstractController
                 algorithm: new Pbkdf2(),
                 cost: 5000,
                 counter: \random_int(1000, 1200),
-                expiresAt: new \DateTimeImmutable('+5 minutes')
+                // Short window: with single-use enforcement the residual replay gap
+                // is bounded by this TTL. Tune together with cost/counter if needed.
+                expiresAt: new \DateTimeImmutable('+2 minutes')
             );
 
             $challenge = (new Altcha($secretKey))->createChallenge($challengeOptions);
