@@ -2,3 +2,4 @@ vendor
 src/Resources/app/storefront/dist
 node_modules
 public/
+.phpunit.cache
