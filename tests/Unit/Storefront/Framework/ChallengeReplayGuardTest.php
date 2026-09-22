@@ -11,8 +11,8 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Pins the single-use guarantee for a solved Altcha challenge. A regression here reopens
- * token replay: one solved proof-of-work would again pass an unlimited number of
- * submissions until it expires.
+ * token replay: one solved proof of work would again pass an unlimited number of submissions
+ * until it expires.
  */
 final class ChallengeReplayGuardTest extends TestCase
 {
@@ -41,14 +41,23 @@ final class ChallengeReplayGuardTest extends TestCase
         self::assertTrue($guard->claim('signature-1', new DateTimeImmutable('+2 minutes')));
     }
 
-    public function testEmptySignatureSkipsStorage(): void
+    public function testClaimDoesNotPurge(): void
     {
+        $statements = [];
         $connection = $this->createMock(Connection::class);
-        $connection->expects(self::never())->method('executeStatement');
+        $connection->method('executeStatement')->willReturnCallback(
+            static function (string $sql) use (&$statements): int {
+                $statements[] = $sql;
 
-        $guard = new ChallengeReplayGuard($connection, $this->createMock(LoggerInterface::class));
+                return 1;
+            }
+        );
 
-        self::assertTrue($guard->claim('', new DateTimeImmutable('+2 minutes')));
+        (new ChallengeReplayGuard($connection, $this->createMock(LoggerInterface::class)))
+            ->claim('signature-1', new DateTimeImmutable('+2 minutes'));
+
+        self::assertCount(1, $statements);
+        self::assertStringContainsString('INSERT', $statements[0]);
     }
 
     private function connection(?\Throwable $insertThrows): Connection

@@ -6,5 +6,15 @@
     <services>
         <defaults autowire="true" autoconfigure="true"/>
         <prototype namespace="Frosh\AltchaCaptcha\" resource="../../" exclude="../../{Resources,FroshAltchaCaptcha.php}"/>
+
+        <service id="Frosh\AltchaCaptcha\ScheduledTask\CleanupUsedChallengesTask">
+            <tag name="shopware.scheduled.task"/>
+        </service>
+
+        <service id="Frosh\AltchaCaptcha\ScheduledTask\CleanupUsedChallengesTaskHandler">
+            <argument type="service" id="scheduled_task.repository"/>
+            <argument type="service" id="monolog.logger.frosh_altcha_captcha"/>
+            <argument type="service" id="Frosh\AltchaCaptcha\Storefront\Framework\ChallengeReplayGuard"/>
+        </service>
     </services>
 </container>
