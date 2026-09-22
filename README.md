@@ -79,17 +79,27 @@ Altcha is an open-source, self-hosted CAPTCHA alternative that provides bot prot
 
 ## Replay protection (single-use challenges)
 
-Altcha verifies a submission's signature, proof of work and expiry, but not whether
-the solved challenge has been used before. Without that check a single solved token is
-accepted on every submission until it expires — one proof of work buys unlimited
-requests inside the validity window.
+Altcha verifies a submission's signature, proof of work and expiry, but not whether the
+solved challenge has already been used. Without that check one solved token is accepted on
+every submission until it expires.
 
-This plugin enforces single use. On the first accepted submission the challenge
-signature is recorded in `frosh_altcha_captcha_used_challenge`; any later submission
-carrying the same signature is rejected. A `UNIQUE` key makes the first write win even
-under concurrent submissions, expired rows are purged opportunistically, and a storage
-failure fails open (logged) so a database outage cannot lock every protected form.
+This plugin records the challenge signature in `frosh_altcha_captcha_used_challenge` on the
+first accepted submission and rejects any later submission carrying it. The primary key
+decides the race between concurrent submissions. A storage failure fails open and is logged,
+so a database outage cannot lock every protected form. Expired rows are removed hourly by the
+`frosh_altcha_captcha.cleanup_used_challenges` scheduled task.
 
-The challenge validity window (`AltchaController`) is kept short as defense in depth;
-tune it together with `cost`/`counter` for the balance of bot cost versus latency your
-shop needs.
+## Tuning
+
+Two values are configurable under *Settings → Basic information → CAPTCHA*:
+
+| Setting | Default | Range | Effect |
+| --- | --- | --- | --- |
+| Challenge validity | 300 s | 30–3600 | How long a challenge stays usable. Shorter bounds the residual replay gap, longer gives visitors more time to submit. |
+| Proof-of-work cost | 5000 | 1000–200000 | Iterations per hashing attempt. Higher costs bots more and makes visitors wait longer. |
+
+Values outside the range are clamped.
+
+With `auto` set to `onload` or `onfocus` the widget solves on page load and shows
+*"Verification expired"* once the validity window passes — pick a window that covers the time
+visitors need to fill in your longest protected form.
