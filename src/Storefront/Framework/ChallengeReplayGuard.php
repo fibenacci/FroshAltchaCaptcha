@@ -2,8 +2,6 @@
 
 namespace Frosh\AltchaCaptcha\Storefront\Framework;
 
-use DateTimeImmutable;
-use DateTimeInterface;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Psr\Log\LoggerInterface;
@@ -27,7 +25,7 @@ class ChallengeReplayGuard
      * Returns false when the signature was already claimed. The primary key decides the
      * race when two submissions carry the same token concurrently.
      */
-    public function claim(string $signature, DateTimeInterface $expiresAt): bool
+    public function claim(string $signature, \DateTimeInterface $expiresAt): bool
     {
         try {
             $this->connection->executeStatement(
@@ -38,7 +36,7 @@ class ChallengeReplayGuard
                 [
                     'signature' => $signature,
                     'expiresAt' => $expiresAt->format(Defaults::STORAGE_DATE_TIME_FORMAT),
-                    'now' => (new DateTimeImmutable())->format(Defaults::STORAGE_DATE_TIME_FORMAT),
+                    'now' => (new \DateTimeImmutable())->format(Defaults::STORAGE_DATE_TIME_FORMAT),
                 ]
             );
         } catch (UniqueConstraintViolationException) {
@@ -58,7 +56,7 @@ class ChallengeReplayGuard
     {
         return (int) $this->connection->executeStatement(
             'DELETE FROM `frosh_altcha_captcha_used_challenge` WHERE `expires_at` < :now',
-            ['now' => (new DateTimeImmutable())->format(Defaults::STORAGE_DATE_TIME_FORMAT)]
+            ['now' => (new \DateTimeImmutable())->format(Defaults::STORAGE_DATE_TIME_FORMAT)]
         );
     }
 }

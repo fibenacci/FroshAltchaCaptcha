@@ -10,7 +10,6 @@ use AltchaOrg\Altcha\Payload;
 use AltchaOrg\Altcha\ServerSignature;
 use AltchaOrg\Altcha\Solution;
 use AltchaOrg\Altcha\VerifySolutionOptions;
-use DateTimeImmutable;
 use Psr\Log\LoggerInterface;
 use Shopware\Storefront\Framework\Captcha\AbstractCaptcha;
 use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
@@ -138,7 +137,7 @@ class AltchaCaptcha extends AbstractCaptcha
      * Altcha proves the work but not that the token is fresh. Without this a single solve
      * passes every submission until it expires.
      *
-     * @param array{signature: string, expiresAt: DateTimeImmutable}|null $claim
+     * @param array{signature: string, expiresAt: \DateTimeImmutable}|null $claim
      */
     private function claim(?array $claim): bool
     {
@@ -160,7 +159,7 @@ class AltchaCaptcha extends AbstractCaptcha
     /**
      * @param array<string, mixed> $payload
      *
-     * @return array{signature: string, expiresAt: DateTimeImmutable}|null
+     * @return array{signature: string, expiresAt: \DateTimeImmutable}|null
      */
     private function powClaim(array $payload): ?array
     {
@@ -185,7 +184,7 @@ class AltchaCaptcha extends AbstractCaptcha
     /**
      * @param array<string, mixed> $payload
      *
-     * @return array{signature: string, expiresAt: DateTimeImmutable}|null
+     * @return array{signature: string, expiresAt: \DateTimeImmutable}|null
      */
     private function serverSignatureClaim(array $payload): ?array
     {
@@ -208,11 +207,11 @@ class AltchaCaptcha extends AbstractCaptcha
         ];
     }
 
-    private function expiry(?int $timestamp): DateTimeImmutable
+    private function expiry(?int $timestamp): \DateTimeImmutable
     {
         // A challenge without an expiry still gets a retention window so its row is purged.
         $timestamp ??= \time() + self::FALLBACK_RETENTION;
 
-        return (new DateTimeImmutable())->setTimestamp($timestamp);
+        return (new \DateTimeImmutable())->setTimestamp($timestamp);
     }
 }
