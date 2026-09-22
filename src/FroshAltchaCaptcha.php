@@ -30,6 +30,12 @@ class FroshAltchaCaptcha extends Plugin
             'path' => '$._value.' . AltchaCaptcha::CAPTCHA_NAME,
             'key' => 'core.basicInformation.activeCaptchasV2',
         ]);
+
+        if ($uninstallContext->keepUserData()) {
+            return;
+        }
+
+        $connection->executeStatement('DROP TABLE IF EXISTS `frosh_altcha_captcha_used_challenge`');
     }
 
     public function executeComposerCommands(): bool

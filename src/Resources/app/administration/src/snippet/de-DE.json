@@ -9,10 +9,14 @@
                 "altchaCaptchaHideLogo": "Verstecke Altcha Logo",
                 "altchaCaptchaFloating": "Floating UI",
                 "altchaCaptchaAutoMode": "Automatische Verifizierung ohne Benutzerinteraktion",
-                "altchaCaptchaInvisible": "Captcha unsichtbar"
+                "altchaCaptchaInvisible": "Captcha unsichtbar",
+                "altchaCaptchaChallengeTtl": "Gültigkeit der Challenge (Sekunden)",
+                "altchaCaptchaCost": "Proof-of-Work-Kosten"
             },
             "helpText": {
-                "altchaCaptchaInvisible": "Das Captcha wird nur angezeigt, wenn es nicht automatisch verifiziert werden konnte. Die automatische Verifizierung wird auf \"onsubmit\" gesetzt."
+                "altchaCaptchaInvisible": "Das Captcha wird nur angezeigt, wenn es nicht automatisch verifiziert werden konnte. Die automatische Verifizierung wird auf \"onsubmit\" gesetzt.",
+                "altchaCaptchaChallengeTtl": "Wie lange eine Challenge nutzbar bleibt. Jede Challenge wird nur einmal akzeptiert; ein kürzeres Fenster verkleinert die verbleibende Replay-Lücke, ein längeres gibt Besuchern mehr Zeit zum Ausfüllen. Standard 300, begrenzt auf 30-3600.",
+                "altchaCaptchaCost": "Iterationen pro Hash-Versuch. Höhere Werte verteuern den Angriff und verlängern die Wartezeit bei der Verifizierung. Standard 5000, begrenzt auf 1000-200000."
             }
         }
     }

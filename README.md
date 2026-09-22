@@ -76,3 +76,30 @@ This plugin is licensed under the [MIT License](LICENSE).
 ## About Altcha
 
 Altcha is an open-source, self-hosted CAPTCHA alternative that provides bot protection without compromising user privacy or experience. Learn more at [altcha.org](https://altcha.org/).
+
+## Replay protection (single-use challenges)
+
+Altcha verifies a submission's signature, proof of work and expiry, but not whether the
+solved challenge has already been used. Without that check one solved token is accepted on
+every submission until it expires.
+
+This plugin records the challenge signature in `frosh_altcha_captcha_used_challenge` on the
+first accepted submission and rejects any later submission carrying it. The primary key
+decides the race between concurrent submissions. A storage failure fails open and is logged,
+so a database outage cannot lock every protected form. Expired rows are removed hourly by the
+`frosh_altcha_captcha.cleanup_used_challenges` scheduled task.
+
+## Tuning
+
+Two values are configurable under *Settings → Basic information → CAPTCHA*:
+
+| Setting | Default | Range | Effect |
+| --- | --- | --- | --- |
+| Challenge validity | 300 s | 30–3600 | How long a challenge stays usable. Shorter bounds the residual replay gap, longer gives visitors more time to submit. |
+| Proof-of-work cost | 5000 | 1000–200000 | Iterations per hashing attempt. Higher costs bots more and makes visitors wait longer. |
+
+Values outside the range are clamped.
+
+With `auto` set to `onload` or `onfocus` the widget solves on page load and shows
+*"Verification expired"* once the validity window passes — pick a window that covers the time
+visitors need to fill in your longest protected form.

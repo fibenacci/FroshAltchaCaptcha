@@ -24,9 +24,12 @@ class AltchaCaptcha extends AbstractCaptcha
     public const CONFIG_FIELD_SECRET = 'secretKey';
     public const CONFIG_PATH = 'core.basicInformation.activeCaptchasV2.' . self::CAPTCHA_NAME . '.config';
 
+    private const FALLBACK_RETENTION = 300;
+
     public function __construct(
         #[Autowire(service: 'monolog.logger.frosh_altcha_captcha')]
         private readonly LoggerInterface $logger,
+        private readonly ChallengeReplayGuard $replayGuard,
     ) {
     }
 
@@ -45,12 +48,23 @@ class AltchaCaptcha extends AbstractCaptcha
         }
 
         try {
+            // The claim is taken from the branch that verified, never searched across the
+            // whole payload: a server-signature payload may carry an unverified `challenge`
+            // key, and burning that instead would leave the real token replayable.
             if (isset($payload['verificationData'])) {
-                return ServerSignature::verifyServerSignature($payload, $secretKey)->verified;
+                if (!ServerSignature::verifyServerSignature($payload, $secretKey)->verified) {
+                    return false;
+                }
+
+                return $this->claim($this->serverSignatureClaim($payload));
             }
 
             if (isset($payload['challenge'], $payload['solution'])) {
-                return $this->verifyPowSolution($payload, $secretKey);
+                if (!$this->verifyPowSolution($payload, $secretKey)) {
+                    return false;
+                }
+
+                return $this->claim($this->powClaim($payload));
             }
         } catch (\Throwable $e) {
             $this->logger->warning('Altcha captcha verification threw; treating submission as invalid.', [
@@ -117,5 +131,87 @@ class AltchaCaptcha extends AbstractCaptcha
             payload: new Payload($challenge, $solution),
             algorithm: new Pbkdf2(),
         ))->verified;
+    }
+
+    /**
+     * Altcha proves the work but not that the token is fresh. Without this a single solve
+     * passes every submission until it expires.
+     *
+     * @param array{signature: string, expiresAt: \DateTimeImmutable}|null $claim
+     */
+    private function claim(?array $claim): bool
+    {
+        if ($claim === null) {
+            $this->logger->warning('Altcha captcha verified a payload without a usable signature; rejecting.');
+
+            return false;
+        }
+
+        if ($this->replayGuard->claim($claim['signature'], $claim['expiresAt'])) {
+            return true;
+        }
+
+        $this->logger->warning('Altcha captcha rejected a replayed challenge.');
+
+        return false;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     *
+     * @return array{signature: string, expiresAt: \DateTimeImmutable}|null
+     */
+    private function powClaim(array $payload): ?array
+    {
+        $challenge = $payload['challenge'] ?? null;
+        if (!\is_array($challenge)) {
+            return null;
+        }
+
+        $signature = $challenge['signature'] ?? null;
+        if (!\is_string($signature) || $signature === '') {
+            return null;
+        }
+
+        $expiresAt = $challenge['parameters']['expiresAt'] ?? null;
+
+        return [
+            'signature' => $signature,
+            'expiresAt' => $this->expiry(\is_int($expiresAt) ? $expiresAt : null),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     *
+     * @return array{signature: string, expiresAt: \DateTimeImmutable}|null
+     */
+    private function serverSignatureClaim(array $payload): ?array
+    {
+        $signature = $payload['signature'] ?? null;
+        if (!\is_string($signature) || $signature === '') {
+            return null;
+        }
+
+        $expiresAt = null;
+        $verificationData = $payload['verificationData'] ?? null;
+        if (\is_string($verificationData)) {
+            \parse_str($verificationData, $fields);
+            $expire = $fields['expire'] ?? null;
+            $expiresAt = \is_numeric($expire) ? (int) $expire : null;
+        }
+
+        return [
+            'signature' => $signature,
+            'expiresAt' => $this->expiry($expiresAt),
+        ];
+    }
+
+    private function expiry(?int $timestamp): \DateTimeImmutable
+    {
+        // A challenge without an expiry still gets a retention window so its row is purged.
+        $timestamp ??= \time() + self::FALLBACK_RETENTION;
+
+        return (new \DateTimeImmutable())->setTimestamp($timestamp);
     }
 }
