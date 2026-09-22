@@ -11,7 +11,6 @@ use AltchaOrg\Altcha\ServerSignature;
 use AltchaOrg\Altcha\Solution;
 use AltchaOrg\Altcha\VerifySolutionOptions;
 use DateTimeImmutable;
-use DateTimeInterface;
 use Psr\Log\LoggerInterface;
 use Shopware\Storefront\Framework\Captcha\AbstractCaptcha;
 use Symfony\Component\DependencyInjection\Attribute\AutoconfigureTag;
@@ -25,6 +24,8 @@ class AltchaCaptcha extends AbstractCaptcha
     public const CAPTCHA_REQUEST_PARAMETER = 'altcha';
     public const CONFIG_FIELD_SECRET = 'secretKey';
     public const CONFIG_PATH = 'core.basicInformation.activeCaptchasV2.' . self::CAPTCHA_NAME . '.config';
+
+    private const FALLBACK_RETENTION = 300;
 
     public function __construct(
         #[Autowire(service: 'monolog.logger.frosh_altcha_captcha')]
@@ -48,12 +49,15 @@ class AltchaCaptcha extends AbstractCaptcha
         }
 
         try {
+            // The claim is taken from the branch that verified, never searched across the
+            // whole payload: a server-signature payload may carry an unverified `challenge`
+            // key, and burning that instead would leave the real token replayable.
             if (isset($payload['verificationData'])) {
                 if (!ServerSignature::verifyServerSignature($payload, $secretKey)->verified) {
                     return false;
                 }
 
-                return $this->claimSingleUse($payload);
+                return $this->claim($this->serverSignatureClaim($payload));
             }
 
             if (isset($payload['challenge'], $payload['solution'])) {
@@ -61,7 +65,7 @@ class AltchaCaptcha extends AbstractCaptcha
                     return false;
                 }
 
-                return $this->claimSingleUse($payload);
+                return $this->claim($this->powClaim($payload));
             }
         } catch (\Throwable $e) {
             $this->logger->warning('Altcha captcha verification threw; treating submission as invalid.', [
@@ -131,16 +135,17 @@ class AltchaCaptcha extends AbstractCaptcha
     }
 
     /**
-     * Rejects a solved challenge that has already been used. Altcha proves the work but
-     * not that the token is fresh; without this a single solve is replayable until expiry.
+     * Altcha proves the work but not that the token is fresh. Without this a single solve
+     * passes every submission until it expires.
      *
-     * @param array<string, mixed> $payload
+     * @param array{signature: string, expiresAt: DateTimeImmutable}|null $claim
      */
-    private function claimSingleUse(array $payload): bool
+    private function claim(?array $claim): bool
     {
-        $claim = $this->extractClaim($payload);
         if ($claim === null) {
-            return true;
+            $this->logger->warning('Altcha captcha verified a payload without a usable signature; rejecting.');
+
+            return false;
         }
 
         if ($this->replayGuard->claim($claim['signature'], $claim['expiresAt'])) {
@@ -155,47 +160,58 @@ class AltchaCaptcha extends AbstractCaptcha
     /**
      * @param array<string, mixed> $payload
      *
-     * @return array{signature: string, expiresAt: DateTimeInterface}|null
+     * @return array{signature: string, expiresAt: DateTimeImmutable}|null
      */
-    private function extractClaim(array $payload): ?array
+    private function powClaim(array $payload): ?array
     {
         $challenge = $payload['challenge'] ?? null;
-        if (\is_array($challenge)) {
-            $signature = $challenge['signature'] ?? null;
-            $expiresAt = $challenge['parameters']['expiresAt'] ?? null;
-
-            if (\is_string($signature) && $signature !== '') {
-                return [
-                    'signature' => $signature,
-                    'expiresAt' => $this->expiryFromTimestamp(\is_int($expiresAt) ? $expiresAt : null),
-                ];
-            }
+        if (!\is_array($challenge)) {
+            return null;
         }
 
-        $signature = $payload['signature'] ?? null;
-        if (\is_string($signature) && $signature !== '') {
-            $expiresAt = null;
-            $verificationData = $payload['verificationData'] ?? null;
-            if (\is_string($verificationData)) {
-                \parse_str($verificationData, $fields);
-                $expire = $fields['expire'] ?? null;
-                $expiresAt = \is_numeric($expire) ? (int) $expire : null;
-            }
-
-            return [
-                'signature' => $signature,
-                'expiresAt' => $this->expiryFromTimestamp($expiresAt),
-            ];
+        $signature = $challenge['signature'] ?? null;
+        if (!\is_string($signature) || $signature === '') {
+            return null;
         }
 
-        return null;
+        $expiresAt = $challenge['parameters']['expiresAt'] ?? null;
+
+        return [
+            'signature' => $signature,
+            'expiresAt' => $this->expiry(\is_int($expiresAt) ? $expiresAt : null),
+        ];
     }
 
-    private function expiryFromTimestamp(?int $timestamp): DateTimeImmutable
+    /**
+     * @param array<string, mixed> $payload
+     *
+     * @return array{signature: string, expiresAt: DateTimeImmutable}|null
+     */
+    private function serverSignatureClaim(array $payload): ?array
     {
-        // A challenge without an expiry still gets a short retention so the row is
-        // deduplicated and later purged rather than kept forever.
-        $timestamp ??= \time() + 300;
+        $signature = $payload['signature'] ?? null;
+        if (!\is_string($signature) || $signature === '') {
+            return null;
+        }
+
+        $expiresAt = null;
+        $verificationData = $payload['verificationData'] ?? null;
+        if (\is_string($verificationData)) {
+            \parse_str($verificationData, $fields);
+            $expire = $fields['expire'] ?? null;
+            $expiresAt = \is_numeric($expire) ? (int) $expire : null;
+        }
+
+        return [
+            'signature' => $signature,
+            'expiresAt' => $this->expiry($expiresAt),
+        ];
+    }
+
+    private function expiry(?int $timestamp): DateTimeImmutable
+    {
+        // A challenge without an expiry still gets a retention window so its row is purged.
+        $timestamp ??= \time() + self::FALLBACK_RETENTION;
 
         return (new DateTimeImmutable())->setTimestamp($timestamp);
     }
