@@ -9,10 +9,14 @@
                 "altchaCaptchaHideLogo": "Hide Altcha Logo",
                 "altchaCaptchaFloating": "Floating UI",
                 "altchaCaptchaAutoMode": "Automatically verify without user interaction",
-                "altchaCaptchaInvisible": "Captcha invisible"
+                "altchaCaptchaInvisible": "Captcha invisible",
+                "altchaCaptchaChallengeTtl": "Challenge validity (seconds)",
+                "altchaCaptchaCost": "Proof-of-work cost"
             },
             "helpText": {
-                "altchaCaptchaInvisible": "The captcha is only displayed when it could not be verified automatically. Automatic verification is set to \"onsubmit\"."
+                "altchaCaptchaInvisible": "The captcha is only displayed when it could not be verified automatically. Automatic verification is set to \"onsubmit\".",
+                "altchaCaptchaChallengeTtl": "How long a challenge stays usable. Each challenge is accepted only once; a shorter window bounds the remaining replay gap, a longer one gives visitors more time to fill in the form. Default 300, clamped to 30-3600.",
+                "altchaCaptchaCost": "Iterations per hashing attempt. Higher values raise the cost for bots and the time visitors wait for verification. Default 5000, clamped to 1000-200000."
             }
         }
     }

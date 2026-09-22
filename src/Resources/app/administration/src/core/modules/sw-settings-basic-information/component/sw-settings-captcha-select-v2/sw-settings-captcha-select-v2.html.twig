@@ -43,6 +43,24 @@
             :label="$tc('sw-settings-basic-information.captcha.label.altchaCaptchaAutoMode')"
             :options="captchaModeOptions"
         />
+        <mt-number-field
+            v-model="currentValue.altchaCaptcha.config.challengeTtl"
+            numberType="int"
+            :min="30"
+            :max="3600"
+            :step="30"
+            :label="$tc('sw-settings-basic-information.captcha.label.altchaCaptchaChallengeTtl')"
+            :helpText="$tc('sw-settings-basic-information.captcha.helpText.altchaCaptchaChallengeTtl')"
+        />
+        <mt-number-field
+            v-model="currentValue.altchaCaptcha.config.cost"
+            numberType="int"
+            :min="1000"
+            :max="200000"
+            :step="1000"
+            :label="$tc('sw-settings-basic-information.captcha.label.altchaCaptchaCost')"
+            :helpText="$tc('sw-settings-basic-information.captcha.helpText.altchaCaptchaCost')"
+        />
         <sw-switch-field
             v-model:value="currentValue.altchaCaptcha.config.hideFooter"
             name="altchaCaptchaHideFooter"

@@ -5,6 +5,7 @@ namespace Frosh\AltchaCaptcha\Controller;
 use AltchaOrg\Altcha\Algorithm\Pbkdf2;
 use AltchaOrg\Altcha\Altcha;
 use AltchaOrg\Altcha\CreateChallengeOptions;
+use Frosh\AltchaCaptcha\Service\ChallengeSettings;
 use Frosh\AltchaCaptcha\Storefront\Framework\AltchaCaptcha;
 use Psr\Log\LoggerInterface;
 use Shopware\Core\System\SystemConfig\SystemConfigService;
@@ -19,6 +20,7 @@ class AltchaController extends AbstractController
 {
     public function __construct(
         private readonly SystemConfigService $systemConfigService,
+        private readonly ChallengeSettings $challengeSettings,
         #[Autowire(service: 'monolog.logger.frosh_altcha_captcha')]
         private readonly LoggerInterface $logger,
     ) {
@@ -34,11 +36,9 @@ class AltchaController extends AbstractController
 
             $challengeOptions = new CreateChallengeOptions(
                 algorithm: new Pbkdf2(),
-                cost: 5000,
+                cost: $this->challengeSettings->cost(),
                 counter: \random_int(1000, 1200),
-                // Short window: with single-use enforcement the residual replay gap
-                // is bounded by this TTL. Tune together with cost/counter if needed.
-                expiresAt: new \DateTimeImmutable('+2 minutes')
+                expiresAt: new \DateTimeImmutable('+' . $this->challengeSettings->ttlSeconds() . ' seconds')
             );
 
             $challenge = (new Altcha($secretKey))->createChallenge($challengeOptions);
